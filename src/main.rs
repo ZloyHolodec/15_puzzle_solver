@@ -1,9 +1,9 @@
 use core::fmt;
-use std::time::Instant;
+use std::{time::Instant, cmp::min};
 
 type BoardArray = [u8; 16];
 
-
+#[derive(Clone)]
 struct BoardState {
     board: BoardArray,
     left_done: bool,
@@ -130,15 +130,20 @@ impl BoardState {
     }
 
     fn diff(&self, other: &Self) -> usize {
-        let mut changes_count: usize = 0;
+        let mut distance: usize = 0;
 
         for i in 0..self.board.len() {
-            if self.board[i] != other.board[i] {
-                changes_count += 1;
-            }
+            let my_value = self.board[i];
+            let (my_x, my_y) = get_xy_pos(i);
+
+            let other_pos = other.board.iter().position(|x| *x == my_value).unwrap();
+            let (other_x, other_y) = get_xy_pos(other_pos);
+
+            distance += (my_x as i32 - other_x as i32).pow(2) as usize;
+            distance += (my_y as i32 - other_y as i32).pow(2) as usize;
         }
 
-        return changes_count;
+        return distance;
     }
 
     fn new(board: BoardArray, zero_pos: usize, range: u32) -> Self {
@@ -194,12 +199,14 @@ fn main() {
 
     let end_state = BoardState::new_from_board(
         [
-            01, 03, 10, 04, 
-            05, 02, 00, 07, 
-            09, 11, 06, 08, 
-            13, 14, 15, 12
+            01, 06, 02, 04, 
+            05, 00, 03, 07, 
+            14, 13, 10, 08, 
+            09, 15, 12, 11
         ]
     );
+    
+    
 
     let start_time = Instant::now();
     calculate(initial_state, end_state);
@@ -209,52 +216,93 @@ fn main() {
 }
 
 fn calculate(inital_state: BoardState, end_state: BoardState) {
-    let mut states: Vec<BoardState> = Vec::with_capacity(100000);
-    states.push(inital_state);
+    let mut states: Vec<Vec<BoardState>> = Vec::with_capacity(16);
+
+    for _ in 0..16 {
+        states.push(Vec::with_capacity(1_000_000));
+    }
+
+    states[inital_state.zero_pos].push(inital_state);
 
     let mut solution_found = false;
+    let mut new_zero_pos: usize = 0;
 
     while !solution_found {
-        let not_activated_state = states.iter_mut()
-            .find(|x| x.can_move())
-            .unwrap();
-
-        let unmoved_state = not_activated_state.do_move();
+        let unmoved_state = get_not_activated_state(&mut states, new_zero_pos % 16, &end_state);
+        new_zero_pos += 1;
 
         for new_state in unmoved_state {
             if let Some(new_state) = new_state {
-                let old_index = states.iter().position(|x| {
-                    x.range > new_state.range && x.is_diff_board(&new_state) 
+                let old_index = states[new_state.zero_pos].iter().position(|x| {
+                    x.range > new_state.range && !x.is_diff_board(&new_state) 
                 });
 
                 if let Some(old_index) = old_index {
-                    states.remove(old_index);
+                    states[new_state.zero_pos].remove(old_index);
                 }
 
                 solution_found = solution_found || !end_state.is_diff_board(&new_state);
-                states.push(new_state);
+                states[new_state.zero_pos].push(new_state);
                 
-                if states.len() % 1000 == 0 {
-                    let min = states.iter().min_by_key(|x| x.diff(&end_state));
-                    println!("Current states: {}", states.len());
-                    println!("Min diff: {}", min.unwrap().diff(&end_state));
+                if get_states_sum(&states) % 1000 == 0 {
+                    let mut min_dist = 99;
+                    for states in &states {
+                        if states.is_empty() {
+                            continue;
+                        }
+
+                        let board = states.iter().min_by_key(|x| x.diff(&end_state)).unwrap();
+                        min_dist = min(
+                            min_dist,
+                            board.diff(&end_state)
+                        );
+                    }
+                    println!("Current states: {}", get_states_sum(&states));
+                    println!("Min diff: {}", min_dist);
                 }
             }
             
         }
     }
-
+     
     print_result(states, end_state);   
 }
 
-fn print_result(states: Vec<BoardState>, end_state: BoardState) {
-    let mut state = states.iter().find(|x| !x.is_diff_board(&end_state));
+fn get_states_sum(arrays: & Vec<Vec<BoardState>>) -> usize {
+    let mut amount = 0;
+
+    for vec in arrays {
+        amount += vec.len(); 
+    }
+
+    return amount;
+}
+
+fn get_not_activated_state(arrays: &mut Vec<Vec<BoardState>>, index: usize, end_state: &BoardState) -> [Option<BoardState>; 4] {
+    let result_board = arrays[index].iter_mut()
+        .filter(|x| x.can_move())
+        .min_by_key(|x| x.diff(end_state));
+
+    match result_board {
+        Some(result) => result.do_move(),
+        None => [None, None, None, None]
+    }
+}
+
+fn print_result(states: Vec<Vec<BoardState>>, end_state: BoardState) {
+    let mut all_states: Vec<BoardState> = Vec::new();
+
+    for mut state in states {
+        all_states.append(&mut state);
+    }
+    
+    let mut state = all_states.iter().find(|x| !x.is_diff_board(&end_state));
     
 
     while let Some(unwrapped_state) = state {
         println!("{}", unwrapped_state);
 
-        state = states.iter().find(|x| x.range < unwrapped_state.range && unwrapped_state.is_single_step_diff(x));
+        state = all_states.iter().find(|x| x.range < unwrapped_state.range && unwrapped_state.is_single_step_diff(x));
     }
 }
 
