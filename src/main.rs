@@ -11,13 +11,14 @@ struct BoardState {
     up_done: bool,
     down_done: bool,
     zero_pos: usize,
-    range: u32
+    range: u32,
+    hash: usize
 }
 
 
 impl BoardState {
     fn is_diff_board(&self, other: &Self) -> bool {
-        if self.zero_pos != other.zero_pos {
+        if self.hash != other.hash {
             return true;
         }
 
@@ -141,15 +142,29 @@ impl BoardState {
     }
 
     fn new(board: BoardArray, zero_pos: usize, range: u32) -> Self {
+        let mut hash: usize = 0;
+
+        for i in 0..board.len() {
+            hash = (i + 1) * board[i] as usize;
+        }
+
+
         return BoardState {
             board,
             zero_pos,
             range,
+            hash,
             left_done: false,
             right_done: false,
             up_done: false,
             down_done: false,
         };
+    }
+
+    fn new_from_board(board: BoardArray) -> Self {
+        let zero_pos = board.iter().position(|x| *x == 0).unwrap();
+
+        return Self::new(board, zero_pos, 0);
     }
 }
 
@@ -168,35 +183,23 @@ impl fmt::Display for BoardState {
 }
 
 fn main() {
-    let initial_state = BoardState{
-        board: [
-            1, 2, 3, 4,
-            5, 6, 7, 8,
-            9, 10, 11, 12,
-            13, 14, 15, 0
-        ],
-        left_done: false,
-        right_done: false,
-        up_done: false,
-        down_done: false,
-        zero_pos: 15,
-        range: 0
-    };
+    let initial_state = BoardState::new_from_board(
+        [
+            01, 02, 03, 04,
+            05, 06, 07, 08,
+            09, 10, 11, 12,
+            13, 14, 15, 00
+        ]
+    );
 
-    let end_state = BoardState{
-        board: [
+    let end_state = BoardState::new_from_board(
+        [
             01, 03, 10, 04, 
             05, 02, 00, 07, 
             09, 11, 06, 08, 
             13, 14, 15, 12
-        ],
-        left_done: false,
-        right_done: false,
-        up_done: false,
-        down_done: false,
-        zero_pos: 10,
-        range: 999
-    };
+        ]
+    );
 
     let start_time = Instant::now();
     calculate(initial_state, end_state);
@@ -206,7 +209,8 @@ fn main() {
 }
 
 fn calculate(inital_state: BoardState, end_state: BoardState) {
-    let mut states = vec![inital_state];
+    let mut states: Vec<BoardState> = Vec::with_capacity(100000);
+    states.push(inital_state);
 
     let mut solution_found = false;
 
@@ -217,23 +221,19 @@ fn calculate(inital_state: BoardState, end_state: BoardState) {
 
         let unmoved_state = not_activated_state.do_move();
 
-        for state in unmoved_state {
-            if let Some(state) = state {
-                let mut old_index = 0;
-            
-                for i in 0..states.len() {
+        for new_state in unmoved_state {
+            if let Some(new_state) = new_state {
+                let old_index = states.iter().position(|x| {
+                    x.range > new_state.range && x.is_diff_board(&new_state) 
+                });
 
-                    if !states[i].is_diff_board(&state) && states[i].range > state.range {
-                        old_index = i;
-                        break;
-                    }
-                }
-
-                if old_index != 0 {
+                if let Some(old_index) = old_index {
                     states.remove(old_index);
                 }
-                solution_found = solution_found || end_state.diff(&state) == 0;
-                states.push(state);
+
+                solution_found = solution_found || !end_state.is_diff_board(&new_state);
+                states.push(new_state);
+                
                 if states.len() % 1000 == 0 {
                     let min = states.iter().min_by_key(|x| x.diff(&end_state));
                     println!("Current states: {}", states.len());
@@ -244,12 +244,11 @@ fn calculate(inital_state: BoardState, end_state: BoardState) {
         }
     }
 
-    print_result(states, end_state);
-    
+    print_result(states, end_state);   
 }
 
 fn print_result(states: Vec<BoardState>, end_state: BoardState) {
-    let mut state = states.iter().find(|x| x.diff(&end_state) == 0);
+    let mut state = states.iter().find(|x| !x.is_diff_board(&end_state));
     
 
     while let Some(unwrapped_state) = state {
