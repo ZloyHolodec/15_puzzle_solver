@@ -226,7 +226,7 @@ fn main() {
         ]
     );
 
-    // this is how we starting(whar you see on screen at begining)
+    // this is how we starting(what you see on screen at begining)
     // 00 is empty block
     #[rustfmt::skip]
     let end_state = BoardState::new_from_board(
