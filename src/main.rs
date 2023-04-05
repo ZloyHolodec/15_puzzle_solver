@@ -37,7 +37,7 @@ impl BoardState {
 
         let (x, _) = get_xy_pos(self.zero_pos);
 
-        if x == 3 {
+        if x == BOARD_SIZE - 1 {
             return None;
         }
 
@@ -100,7 +100,7 @@ impl BoardState {
 
         let (_, y) = get_xy_pos(self.zero_pos);
 
-        if y == 3 {
+        if y == BOARD_SIZE - 1 {
             return None;
         }
 
